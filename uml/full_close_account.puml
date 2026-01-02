@@ -1,0 +1,152 @@
+@startuml
+actor Requestor as App
+box "wrapper-tm-loan-create MS"  #powderblue
+entity "POST /v1/loc/account/close" as Wrapper #deepskyblue
+end box
+
+box "Redis" #papayawhip
+entity "Redis" as redis #salmon
+end box
+
+box "CoreBank"  #6ac1de
+entity "thought machine" as vc #deepskyblue
+end box
+
+activate App
+App -> Wrapper ++: close loan
+
+group Update ACCOUNT_STATUS_CLOSURE
+Wrapper -> vc ++ :PUT /v1/accounts/{{account_id}}
+
+note right of Wrapper
+{
+   "request_id": "{{uuid}}",
+   "account": {
+       "status": "ACCOUNT_STATUS_PENDING_CLOSURE"
+   },
+   "update_mask": {
+       "paths": [
+           "status"
+       ]
+   }
+end note
+vc -> Wrapper -- : status
+alt status 400
+
+    Wrapper -> redis : SET CLOSE:ACCOUNT:{{account_id}}
+    Wrapper -> App: 400 bad request #red
+end
+end group
+
+group Get plan_id
+Wrapper -> vc ++ :GET /account-plan-assocs?account_ids={{account_id}}&page_size=1
+vc -> Wrapper --: list account_plan_assocs
+alt account_plan_assocs empty
+
+    Wrapper -> redis : SET CLOSE:ACCOUNT:{{account_id}}
+    note right of redis
+    {
+        "stageId": 1,
+        "status": "FAIL",
+        "requestBody": "requestBeforeCallApi",
+        "responseBody": "responseAfterCallApi"
+    }
+    end note
+    Wrapper -> App: 400 bad request #red
+end
+end group
+
+group Dissociating the account from the Plan
+Wrapper -> vc ++ : /v1/plan-updates
+note right of Wrapper
+{
+    "request_id": "{{$guid}}",
+    "plan_update": {
+       "plan_id": "{{supervisor_plan_id}}",
+       "disassociate_account_update":
+       {
+           "account_plan_assoc_id": "{{association_id_loan}}"
+       }
+   }
+}
+end note
+vc -> Wrapper --: status
+alt status 400
+
+    Wrapper -> redis : SET CLOSE:ACCOUNT:{{account_id}}
+    note right of redis
+    {
+        "stageId": 2,
+        "status": "FAIL",
+        "requestBody": "requestBeforeCallApi",
+        "responseBody": "responseAfterCallApi"
+    }
+    end note
+    Wrapper -> App: 400 bad request #red
+end
+end group
+
+alt if close loan
+    group Get principal From Loan Acct
+    Wrapper -> vc ++: GET /accounts/{{account_id}}?fields_to_include=INCLUDE_FIELD_DERIVED_INSTANCE_PARAM_VALS
+    vc -> Wrapper --: principal
+    end group
+    group Inbound Hard Settlement posting for the equivalent original principal amounts
+    Wrapper -> vc ++: Inbound principal IN Loc ForceOverride
+    note right of Wrapper
+    kafkaTopic:vault.core.postings.requests.v1
+    {
+        "request_id": "{{$timestamp}}",
+        "posting_instruction_batch": {
+            "client_id": "AsyncCreatePostingInstructionBatch",
+            "client_batch_id": "{{client_batch_id}}",
+            "posting_instructions": [
+                {
+                    "client_transaction_id": "{{$guid}}",
+                    "inbound_hard_settlement": {
+                        "amount": "1000",
+                        "denomination": "THB",
+                        "target_account": {
+                            "account_id": "{{loc_account_id}}"
+                        },
+                        "internal_account_id": "1"
+                    },
+                    "pics": [],
+                    "instruction_details": {
+                        "force_override": "true"
+                    }
+                }
+            ],
+            "batch_details": {}
+        }
+    }
+    end note
+    loop While status is "pending"
+        Wrapper -> redis: Validate transfer status (GET)
+        activate redis
+        note right of Wrapper
+        Instance: <b>ktb-dcb-xxxx
+        KEY: <b>Transfers|${request_id}
+        Value: <b> Status
+        Type: <b>GET
+        end note
+        redis --> Wrapper: Return status (e.g., "pending")
+        deactivate redis
+        Wrapper -> Wrapper: time.sleep(500*time.Millisecond)
+    end loop
+    alt transfer_status != "Success"
+        Wrapper -> redis : SET CLOSE:ACCOUNT:{{account_id}}
+        note right of redis
+        {
+            "stageId": 3,
+            "status": "FAIL",
+            "requestBody": "requestBeforeCallApi",
+            "responseBody": "responseAfterCallApi"
+        }
+        end note
+        Wrapper --> App: Return 400
+    end alt
+end
+deactivate App
+Wrapper -> App --: OK RESPONSE
+@enduml

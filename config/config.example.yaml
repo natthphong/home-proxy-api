@@ -1,0 +1,63 @@
+LogConfig:
+  Level: "debug"
+Server:
+  Name: "home-proxy"
+  Port: "8080"
+lineConfig:
+  0:
+    ChannelSecret:
+    ChannelToken:
+Env: LOCAL
+DBConfig:
+  Host: ""
+  Port: ""
+  Username: ""
+  Password: ""
+  Name: ""
+  MaxOpenConn: 4
+  MaxConnLifeTime: 300
+HTTP:
+  TimeOut: "10s"
+  MaxIdleConn: 100
+  MaxIdleConnPerHost: 100
+  MaxConnPerHost: 100
+
+RedisConfig:
+  Mode: "normal"
+  Host: ""
+  Port: "6379"
+  DB: 0
+  Password: ""
+  PoolTimeout: "10s"
+  DialTimeout: "10s"
+  WriteTimeout: "30s"
+  ReadTimeout: "30s"
+  ConnMaxIdleTime: "10s"
+
+
+KafkaConfig:
+  Brokers:
+    - ":9092"
+  Group: "local"
+  Version: "3.2.0"
+  SSAL: false
+  TLS: false
+  CertPath: ""
+  Certs: ""
+  Username: ""
+  Password: ""
+  Strategy: "roundrobin"
+  ClientID: ""
+  Topic:
+    WebHookTopic: "proxy.webhook.dev"
+
+EmailConfig:
+  Email:
+  User:
+  Pass: 
+OpenAiConfig:
+  ApiKey: ""
+GemeniConfig:
+  ApiKey: ""
+OpenRouterConfig:
+  ApiKey: ""
