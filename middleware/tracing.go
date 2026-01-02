@@ -33,16 +33,11 @@ func OTelFiberMiddleware(serviceName string) fiber.Handler {
 
 		c.SetUserContext(ctx)
 
-		route := c.Route().Path
-		if route == "" {
-			route = c.Path()
-		}
-
 		span.SetAttributes(
 			attribute.String("service.name", serviceName),
 
 			attribute.String("http.method", c.Method()),
-			attribute.String("http.route", route),
+			attribute.String("http.route", c.OriginalURL()),
 			attribute.String("http.target", c.OriginalURL()),
 			attribute.String("http.scheme", string(c.Protocol())),
 			attribute.String("net.peer.ip", c.IP()),
