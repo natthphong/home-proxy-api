@@ -54,10 +54,23 @@ KafkaConfig:
 EmailConfig:
   Email:
   User:
-  Pass: 
+  Pass:
 OpenAiConfig:
   ApiKey: ""
 GemeniConfig:
   ApiKey: ""
 OpenRouterConfig:
   ApiKey: ""
+
+OtelConfig:
+  Endpoint: ""
+
+awsS3Config:
+  enable: true
+  endpoint: ""
+  region: "us-east-1"
+  bucket: ""
+  accessKey: ""
+  secretKey: ""
+  useSSL: false
+  pathStyle: true

@@ -2,7 +2,7 @@
 set -e
 
 APP_NAME=home-proxy
-IMAGE_TAG=dev
+IMAGE_TAG=2
 OUTPUT_TAR=${APP_NAME}-${IMAGE_TAG}.tar
 IMAGE_NAME=${APP_NAME}:${IMAGE_TAG}
 echo "==> Build Go binary"

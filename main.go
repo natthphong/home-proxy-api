@@ -19,6 +19,7 @@ import (
 	"gitlab.com/home-server7795544/home-server/gateway/home-proxy/config"
 	"gitlab.com/home-server7795544/home-server/gateway/home-proxy/handler/ai_proxy"
 	"gitlab.com/home-server7795544/home-server/gateway/home-proxy/handler/email"
+	"gitlab.com/home-server7795544/home-server/gateway/home-proxy/handler/file"
 	"gitlab.com/home-server7795544/home-server/gateway/home-proxy/handler/internal_webhook"
 	"gitlab.com/home-server7795544/home-server/gateway/home-proxy/handler/line"
 	"gitlab.com/home-server7795544/home-server/gateway/home-proxy/handler/logproxy"
@@ -30,6 +31,7 @@ import (
 	"gitlab.com/home-server7795544/home-server/gateway/home-proxy/internal/httputil"
 	"gitlab.com/home-server7795544/home-server/gateway/home-proxy/internal/kafka"
 	"gitlab.com/home-server7795544/home-server/gateway/home-proxy/internal/logz"
+	"gitlab.com/home-server7795544/home-server/gateway/home-proxy/internal/s3client"
 	"gitlab.com/home-server7795544/home-server/gateway/home-proxy/internal/scramkafka"
 	"gitlab.com/home-server7795544/home-server/gateway/home-proxy/internal/tracing"
 	"gitlab.com/home-server7795544/home-server/gateway/home-proxy/line_message"
@@ -131,6 +133,16 @@ func main() {
 	if err != nil {
 		log.Fatalf("error creating MetaAI instance: %v", err)
 	}
+
+	logger.Info("metaClient Connected !!")
+
+	s3c, err := s3client.New(ctx, cfg.AwsS3Config)
+	if err != nil {
+		logger.Fatal("s3 init failed", zap.Error(err))
+	}
+	logger.Info("s3Client Connected !!")
+	fileHandler := file.New(s3c, cfg.AwsS3Config)
+
 	app.Use(middleware.OTelFiberMiddleware(cfg.Server.Name))
 
 	app.Use(middleware.AuditLogger())
@@ -187,7 +199,8 @@ func main() {
 		cache.GetRedis(redisCMD),
 		dbPool,
 	))
-
+	group.Post("/file", fileHandler.Upload())
+	group.Get("/file", fileHandler.Get())
 	logger.Info(fmt.Sprintf("/%s/api/v1", cfg.Server.Name))
 	if err = app.Listen(fmt.Sprintf(":%v", cfg.Server.Port)); err != nil {
 		logger.Fatal(err.Error())
@@ -198,6 +211,7 @@ func main() {
 func initFiber() *fiber.App {
 	app := fiber.New(
 		fiber.Config{
+			BodyLimit:             10 * 1024 * 1024,
 			ReadTimeout:           5 * time.Second,
 			WriteTimeout:          5 * time.Second,
 			IdleTimeout:           30 * time.Second,
