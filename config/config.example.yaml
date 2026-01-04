@@ -74,3 +74,5 @@ awsS3Config:
   secretKey: ""
   useSSL: false
   pathStyle: true
+  prefixTTSVoice: "tts/"
+  publicBase: ""

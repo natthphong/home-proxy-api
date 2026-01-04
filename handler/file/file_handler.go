@@ -69,8 +69,7 @@ func (h *Handler) Upload() fiber.Handler {
 
 		return api.Ok(c, fiber.Map{
 			"key": key,
-			// optional: ถ้าอยากคืน URL ด้วย
-			// "url": fmt.Sprintf("%s/file?key=%s", h.s3cfg.PublicBase, key),
+			"url": fmt.Sprintf("%s/file?key=%s", h.s3cfg.PublicBase, key),
 		})
 	}
 }
@@ -101,7 +100,7 @@ func (h *Handler) Get() fiber.Handler {
 		if out.ContentLength != nil && *out.ContentLength != 0 {
 			c.Set("Content-Length", fmt.Sprintf("%d", out.ContentLength))
 		}
-		
+
 		c.Context().SetBodyStreamWriter(func(w *bufio.Writer) {
 			_, _ = io.Copy(w, out.Body)
 			_ = out.Body.Close()

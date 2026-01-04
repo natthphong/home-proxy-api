@@ -23,6 +23,7 @@ import (
 	"gitlab.com/home-server7795544/home-server/gateway/home-proxy/handler/internal_webhook"
 	"gitlab.com/home-server7795544/home-server/gateway/home-proxy/handler/line"
 	"gitlab.com/home-server7795544/home-server/gateway/home-proxy/handler/logproxy"
+	"gitlab.com/home-server7795544/home-server/gateway/home-proxy/handler/voice"
 	"gitlab.com/home-server7795544/home-server/gateway/home-proxy/internal/ai/gemini"
 	"gitlab.com/home-server7795544/home-server/gateway/home-proxy/internal/ai/gpt"
 	"gitlab.com/home-server7795544/home-server/gateway/home-proxy/internal/ai/metaai"
@@ -141,7 +142,10 @@ func main() {
 		logger.Fatal("s3 init failed", zap.Error(err))
 	}
 	logger.Info("s3Client Connected !!")
+	ttsFunc := gpt.SendTextAndGetAudioWithStyle(clientOpenAi)
+	sttFunc := gpt.SendAudioAndGetText(clientOpenAi)
 	fileHandler := file.New(s3c, cfg.AwsS3Config)
+	voiceHandler := voice.New(ttsFunc, sttFunc, s3c, cfg.AwsS3Config)
 
 	app.Use(middleware.OTelFiberMiddleware(cfg.Server.Name))
 
@@ -201,6 +205,8 @@ func main() {
 	))
 	group.Post("/file", fileHandler.Upload())
 	group.Get("/file", fileHandler.Get())
+	group.Post("/tts", voiceHandler.TTS())
+	group.Post("/stt", voiceHandler.SST())
 	logger.Info(fmt.Sprintf("/%s/api/v1", cfg.Server.Name))
 	if err = app.Listen(fmt.Sprintf(":%v", cfg.Server.Port)); err != nil {
 		logger.Fatal(err.Error())
@@ -212,6 +218,7 @@ func initFiber() *fiber.App {
 	app := fiber.New(
 		fiber.Config{
 			BodyLimit:             10 * 1024 * 1024,
+			ReadBufferSize:        64 * 1024,
 			ReadTimeout:           5 * time.Second,
 			WriteTimeout:          5 * time.Second,
 			IdleTimeout:           30 * time.Second,
@@ -220,7 +227,13 @@ func initFiber() *fiber.App {
 			StrictRouting:         true,
 		},
 	)
-	app.Use(cors.New(cors.ConfigDefault))
+	//app.Use(cors.New(cors.ConfigDefault))
+	app.Use(cors.New(cors.Config{
+		AllowOrigins: "*",
+		AllowMethods: "GET,POST,OPTIONS",
+		AllowHeaders: "Origin, Content-Type, Accept, Authorization, requestId",
+	}))
+
 	app.Use(SetHeaderID())
 	return app
 }
@@ -234,7 +247,7 @@ func SetHeaderID() fiber.Handler {
 			traceId = randomTrace
 		}
 		if reqId == "" {
-			return api.BadRequest(c, "requestId is required")
+			reqId = uuid.New().String()
 		}
 
 		c.Accepts(fiber.MIMEApplicationJSON)

@@ -87,15 +87,16 @@ type RedisConfig struct {
 }
 
 type AwsS3Config struct {
-	Enable     bool   `mapstructure:"enable" json:"enable"`
-	Endpoint   string `mapstructure:"endpoint" json:"endpoint"`
-	Region     string `mapstructure:"region" json:"region"`
-	Bucket     string `mapstructure:"bucket" json:"bucket"`
-	AccessKey  string `mapstructure:"accessKey" json:"accessKey"`
-	SecretKey  string `mapstructure:"secretKey" json:"secretKey"`
-	UseSSL     bool   `mapstructure:"useSSL" json:"useSSL"`
-	PathStyle  bool   `mapstructure:"pathStyle" json:"pathStyle"`
-	PublicBase string `mapstructure:"publicBase" json:"publicBase"`
+	Enable         bool   `mapstructure:"enable" json:"enable"`
+	Endpoint       string `mapstructure:"endpoint" json:"endpoint"`
+	Region         string `mapstructure:"region" json:"region"`
+	Bucket         string `mapstructure:"bucket" json:"bucket"`
+	AccessKey      string `mapstructure:"accessKey" json:"accessKey"`
+	SecretKey      string `mapstructure:"secretKey" json:"secretKey"`
+	UseSSL         bool   `mapstructure:"useSSL" json:"useSSL"`
+	PathStyle      bool   `mapstructure:"pathStyle" json:"pathStyle"`
+	PublicBase     string `mapstructure:"publicBase" json:"publicBase"`
+	PrefixTTSVoice string `mapstructure:"prefixTTSVoice" json:"prefixTTSVoice"`
 }
 
 type LineConfig struct {

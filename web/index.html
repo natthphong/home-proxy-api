@@ -1,0 +1,107 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8" />
+    <title>STT Test</title>
+    <style>
+        body {
+            font-family: sans-serif;
+            padding: 20px;
+        }
+        button {
+            margin-right: 10px;
+            padding: 10px 16px;
+            font-size: 16px;
+        }
+        pre {
+            background: #f4f4f4;
+            padding: 12px;
+            margin-top: 20px;
+            white-space: pre-wrap;
+        }
+    </style>
+</head>
+<body>
+
+<h2>🎙️ Speech to Text Test</h2>
+
+<button id="start">Start Recording</button>
+<button id="stop" disabled>Stop & Send</button>
+
+<p>Status: <span id="status">Idle</span></p>
+
+<h3>Result</h3>
+<pre id="result"></pre>
+
+<script>
+    let mediaRecorder;
+    let audioChunks = [];
+
+    const startBtn = document.getElementById("start");
+    const stopBtn = document.getElementById("stop");
+    const statusEl = document.getElementById("status");
+    const resultEl = document.getElementById("result");
+
+    startBtn.onclick = async () => {
+        audioChunks = [];
+        resultEl.textContent = "";
+        statusEl.textContent = "Requesting microphone...";
+
+        const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+        mediaRecorder = new MediaRecorder(stream, {
+            mimeType: "audio/webm"
+        });
+
+        mediaRecorder.ondataavailable = e => {
+            if (e.data.size > 0) audioChunks.push(e.data);
+        };
+
+        mediaRecorder.start();
+        statusEl.textContent = "Recording...";
+        startBtn.disabled = true;
+        stopBtn.disabled = false;
+    };
+
+    stopBtn.onclick = async () => {
+        statusEl.textContent = "Stopping...";
+        stopBtn.disabled = true;
+
+        mediaRecorder.stop();
+
+        mediaRecorder.onstop = async () => {
+            const blob = new Blob(audioChunks, { type: "audio/webm" });
+            const file = new File([blob], "record.webm", { type: "audio/webm" });
+
+            const formData = new FormData();
+            formData.append("file", file);
+            formData.append("mediaType", "audio/webm");
+
+            statusEl.textContent = "Uploading...";
+
+            try {
+                const resp = await fetch(
+                    "http://localhost:8080/home-proxy/api/v1/stt",
+                    {
+                        method: "POST",
+                        headers: {
+                            "requestId": crypto.randomUUID()
+                        },
+                        body: formData
+                    }
+                );
+
+                const json = await resp.json();
+                resultEl.textContent = JSON.stringify(json, null, 2);
+                statusEl.textContent = "Done";
+            } catch (err) {
+                statusEl.textContent = "Error";
+                resultEl.textContent = err.toString();
+            }
+
+            startBtn.disabled = false;
+        };
+    };
+</script>
+
+</body>
+</html>
