@@ -170,6 +170,8 @@ func main() {
 		gpt.SendTextAndGetText(clientOpenAi),
 		metaClient,
 	))
+	group.Post("/ai/tts", voiceHandler.TTS())
+	group.Post("/ai/stt", voiceHandler.SST())
 
 	//TODO wait credit 10$
 	group.Post("/ai/chat/complete", ai_proxy.NewChatCompletionHandler(
@@ -205,8 +207,6 @@ func main() {
 	))
 	group.Post("/file", fileHandler.Upload())
 	group.Get("/file", fileHandler.Get())
-	group.Post("/tts", voiceHandler.TTS())
-	group.Post("/stt", voiceHandler.SST())
 	logger.Info(fmt.Sprintf("/%s/api/v1", cfg.Server.Name))
 	if err = app.Listen(fmt.Sprintf(":%v", cfg.Server.Port)); err != nil {
 		logger.Fatal(err.Error())
