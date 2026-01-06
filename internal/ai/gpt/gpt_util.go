@@ -3,12 +3,15 @@ package gpt
 import (
 	"bytes"
 	"context"
+	"encoding/json"
 	"fmt"
 	"io"
+	"strings"
 	"text/template"
 
 	"github.com/openai/openai-go"
 	"github.com/openai/openai-go/option"
+	"gitlab.com/home-server7795544/home-server/gateway/home-proxy/internal/ai"
 	"go.uber.org/zap"
 )
 
@@ -34,21 +37,82 @@ func GeneratePrompt(templateFormat string, values map[string]string) (string, er
 	return prompt.String(), nil
 }
 
-type SendTextAndGetTextFunc func(ctx context.Context, logger *zap.Logger, prompt string) (string, error)
+type SendTextAndGetTextFunc func(ctx context.Context, logger *zap.Logger, req ai.PromptRequest) (string, error)
 
 func SendTextAndGetText(client *openai.Client) SendTextAndGetTextFunc {
-	return func(ctx context.Context, logger *zap.Logger, prompt string) (string, error) {
-		chatCompletion, err := client.Chat.Completions.New(ctx, openai.ChatCompletionNewParams{
-			Messages: openai.F([]openai.ChatCompletionMessageParamUnion{
-				openai.UserMessage(prompt),
-			}),
-			Model: openai.F(openai.ChatModelGPT4oMini),
-			/*MaxTokens: openai.Int(4000),*/
-		})
+	return func(ctx context.Context, logger *zap.Logger, req ai.PromptRequest) (string, error) {
+		msgs := make([]openai.ChatCompletionMessageParamUnion, 0, len(req.ChatHistory)+1)
+		for i, h := range req.ChatHistory {
+			role := strings.ToLower(strings.TrimSpace(h.Role))
+			content := strings.TrimSpace(h.Message)
+			if content == "" {
+				continue
+			}
+			switch role {
+			case ai.RoleSystem:
+				msgs = append(msgs, openai.SystemMessage(content))
+			case ai.RoleAssistant:
+				msgs = append(msgs, openai.AssistantMessage(content))
+			case ai.RoleUser, "":
+				msgs = append(msgs, openai.UserMessage(content))
+			default:
+				return "", fmt.Errorf("chatHistory[%d]: invalid role %q (allowed: system/user/assistant)", i, h.Role)
+			}
+		}
+
+		if strings.TrimSpace(req.Prompt) != "" {
+			msgs = append(msgs, openai.UserMessage(req.Prompt))
+		}
+		if len(msgs) == 0 {
+			return "", fmt.Errorf("no messages to send (prompt empty and chatHistory empty)")
+		}
+
+		params := openai.ChatCompletionNewParams{
+			Messages: openai.F(msgs),
+			Model:    openai.F(openai.ChatModelGPT4oMini),
+		}
+
+		if req.ResponseOptions != nil {
+			ro := req.ResponseOptions
+
+			name := strings.TrimSpace(ro.Name)
+			if name == "" {
+				name = "response"
+			}
+
+			// Schema must be a JSON object (your RawMessage should contain: {"type":"object",...})
+			if len(ro.Schema) == 0 {
+				return "", fmt.Errorf("responseOptions.schema is required when responseOptions is set")
+			}
+
+			var schemaAny any
+			if err := json.Unmarshal(ro.Schema, &schemaAny); err != nil {
+				return "", fmt.Errorf("invalid responseOptions.schema json: %w", err)
+			}
+
+			rf := openai.ResponseFormatJSONSchemaParam{
+				Type: openai.F(openai.ResponseFormatJSONSchemaTypeJSONSchema),
+				JSONSchema: openai.F(openai.ResponseFormatJSONSchemaJSONSchemaParam{
+					Name:        openai.F(name),
+					Description: openai.F(ro.Description),
+					Schema:      openai.F(schemaAny),
+					Strict:      openai.F(ro.Strict),
+				}),
+			}
+			params.ResponseFormat = openai.F[openai.ChatCompletionNewParamsResponseFormatUnion](rf)
+
+		}
+
+		chatCompletion, err := client.Chat.Completions.New(ctx, params)
 		if err != nil {
+			logger.Error("chat completion failed", zap.Error(err))
 			return "", err
 		}
-		return chatCompletion.Choices[0].Message.Content, err
+		if len(chatCompletion.Choices) == 0 {
+			return "", fmt.Errorf("no choices returned")
+		}
+
+		return chatCompletion.Choices[0].Message.Content, nil
 	}
 }
 

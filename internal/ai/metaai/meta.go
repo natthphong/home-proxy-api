@@ -182,11 +182,11 @@ func (m *MetaAI) GetAccessToken() (string, error) {
 	return m.accessToken, nil
 }
 
-func (m *MetaAI) Prompt(message string, stream bool, attempts int, newConversation bool) (interface{}, error) {
+func (m *MetaAI) Prompt(message string, stream bool, attempts int, newConversation bool) (string, error) {
 	if !m.isAuthed {
 		token, err := m.GetAccessToken()
 		if err != nil {
-			return nil, err
+			return "", err
 		}
 		m.accessToken = token
 	}
@@ -210,7 +210,7 @@ func (m *MetaAI) Prompt(message string, stream bool, attempts int, newConversati
 
 	variablesJSON, err := json.Marshal(variables)
 	if err != nil {
-		return nil, fmt.Errorf("failed to marshal variables: %w", err)
+		return "", fmt.Errorf("failed to marshal variables: %w", err)
 	}
 
 	payload := url.Values{}
@@ -237,7 +237,7 @@ func (m *MetaAI) Prompt(message string, stream bool, attempts int, newConversati
 
 	req, err := http.NewRequest("POST", "https://graph.meta.ai/graphql?locale=user", bytes.NewBufferString(payload.Encode()))
 	if err != nil {
-		return nil, fmt.Errorf("failed to create request: %w", err)
+		return "", fmt.Errorf("failed to create request: %w", err)
 	}
 
 	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
@@ -258,13 +258,13 @@ func (m *MetaAI) Prompt(message string, stream bool, attempts int, newConversati
 	}
 	resp, err := m.session.Do(req)
 	if err != nil {
-		return nil, err
+		return "", err
 	}
 
 	defer resp.Body.Close()
 	body, err := io.ReadAll(resp.Body)
 	if err != nil {
-		return nil, err
+		return "", err
 	}
 
 	lastStreamedResponse, err := m.ExtractLastResponse(string(body))
@@ -276,16 +276,20 @@ func (m *MetaAI) Prompt(message string, stream bool, attempts int, newConversati
 	if err != nil {
 		return m.Retry(message, stream, attempts)
 	}
-	return extractedData, nil
+	strValue, err := json.Marshal(extractedData)
+	if err != nil {
+		return "", err
+	}
+	return string(strValue), nil
 }
 
-func (m *MetaAI) Retry(message string, stream bool, attempts int) (interface{}, error) {
+func (m *MetaAI) Retry(message string, stream bool, attempts int) (string, error) {
 	if attempts >= maxRetries {
 		log.Printf("unable to obtain a valid response from Meta AI. retrying... attempt %d/%d", attempts+1, maxRetries)
 		time.Sleep(3 * time.Second)
 		return m.Prompt(message, stream, attempts+1, false)
 	}
-	return nil, fmt.Errorf("unable to obtain a valid response from Meta AI. try again later")
+	return "", fmt.Errorf("unable to obtain a valid response from Meta AI. try again later")
 }
 
 func (m *MetaAI) ExtractLastResponse(response string) (*MetaAIResponse, error) {

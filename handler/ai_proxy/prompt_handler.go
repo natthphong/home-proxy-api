@@ -1,10 +1,12 @@
 package ai_proxy
 
 import (
+	"encoding/json"
 	"strings"
 
 	"github.com/gofiber/fiber/v2"
 	"gitlab.com/home-server7795544/home-server/gateway/home-proxy/api"
+	"gitlab.com/home-server7795544/home-server/gateway/home-proxy/internal/ai"
 	"gitlab.com/home-server7795544/home-server/gateway/home-proxy/internal/ai/gemini"
 	"gitlab.com/home-server7795544/home-server/gateway/home-proxy/internal/ai/gpt"
 	meta_ai "gitlab.com/home-server7795544/home-server/gateway/home-proxy/internal/ai/metaai"
@@ -18,11 +20,6 @@ const (
 	Meta   = "meta"
 )
 
-type PromptRequest struct {
-	Prompt string `json:"prompt"`
-	Model  string `json:"model"`
-}
-
 func NewPromptHandler(
 	geminiPrompt gemini.SendTextAndGetTextFunc,
 	gptPrompt gpt.SendTextAndGetTextFunc,
@@ -35,8 +32,8 @@ func NewPromptHandler(
 		ctx := c.Context()
 		reqID := c.Get("requestId")
 		var (
-			req PromptRequest
-			res interface{}
+			req ai.PromptRequest
+			res string
 		)
 		err := c.BodyParser(&req)
 		if err != nil {
@@ -47,10 +44,13 @@ func NewPromptHandler(
 		}
 		modelUse := Gemini
 		model := strings.ToLower(req.Model)
+		if model != Gpt && (len(req.ChatHistory) > 0 || req.ResponseOptions != nil) {
+			return api.BadRequest(c, "support function only gpt")
+		}
 		if model == Gpt {
 			modelUse = Gpt
 			logger.Debug("gptPrompt", zap.String("reqID", reqID))
-			res, err = gptPrompt(ctx, logger, req.Prompt)
+			res, err = gptPrompt(ctx, logger, req)
 		} else if model == Meta {
 			modelUse = Meta
 			res, err = metaClient.Prompt(req.Prompt, false, 0, true)
@@ -61,10 +61,18 @@ func NewPromptHandler(
 		if err != nil {
 			return api.InternalError(c, "Something went wrong")
 		}
-
-		return api.Ok(c, fiber.Map{
+		resp := fiber.Map{
 			"result": res,
 			"model":  modelUse,
-		})
+		}
+		if req.ResponseOptions != nil {
+			var resJson interface{}
+			err = json.Unmarshal([]byte(res), &resJson)
+			if err != nil {
+				return api.InternalError(c, "Something went wrong")
+			}
+			resp["resultJson"] = resJson
+		}
+		return api.Ok(c, resp)
 	}
 }
