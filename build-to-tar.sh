@@ -2,7 +2,7 @@
 set -e
 
 APP_NAME=home-proxy
-IMAGE_TAG=3
+IMAGE_TAG=4
 OUTPUT_TAR=${APP_NAME}-${IMAGE_TAG}.tar
 IMAGE_NAME=${APP_NAME}:${IMAGE_TAG}
 echo "==> Build Go binary"
@@ -17,3 +17,21 @@ docker save -o ${OUTPUT_TAR} ${IMAGE_NAME}
 echo "==> Done"
 echo "Image: ${IMAGE_NAME}"
 echo "Tar  : ${OUTPUT_TAR}"
+
+
+#PORTAINER_BASE_URL=
+#ENDPOINT_ID="3"
+#PORTAINER_API_KEY="${PORTAINER_API_KEY:-}"
+#
+#echo "==> Upload tar to Portainer endpoint ${ENDPOINT_ID}"
+#curl -fS -X POST \
+#  "${PORTAINER_BASE_URL}/api/endpoints/${ENDPOINT_ID}/docker/v1.44/images/load" \
+#  -H "X-API-Key: ${PORTAINER_API_KEY}" \
+#  -H "Content-Type: application/x-tar" \
+#  --data-binary "@${OUTPUT_TAR}"
+#
+#echo "==> Done"
+#echo "Image: ${IMAGE_NAME}"
+#echo "Tar  : ${OUTPUT_TAR}"
+#
+#rm -rf OUTPUT_TAR
